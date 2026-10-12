@@ -37,7 +37,66 @@ public final class Ll1ParsingTable {
   /** Constructs the complete table, including conflicting cells when they exist. */
   public static Ll1ParsingTable build(final Grammar grammar) {
     // TODO: Complete this method
-    return null; // TODO: replace the return value.
+    // 1. Compute FIRST sets
+    Map<String, Set<String>> firstSets = initialSets(grammar);
+
+    boolean changed;
+    do {
+      changed = false;
+      for (Production p : grammar.getProductions()) {
+        // A -> a
+        // FIRST(A) <- FIRST(A) + FIRST(a)
+        changed |= firstSets.get(p.getLeftHandSide()).addAll(
+          firstOfSequence(p.getRightHandSide(), grammar, firstSets));
+      }
+    } while (changed);
+
+    // 2. Compute FOLLOW sets
+    Map<String, Set<String>> followSets = initialSets(grammar);
+    followSets.get(grammar.getStartSymbol()).add(Grammar.END_MARKER);
+
+    do {
+      changed = false;
+      for (Production p : grammar.getProductions()) {
+        for (int i = 0; i < p.getRightHandSide().size(); i++) {
+          String symbol = p.getRightHandSide().get(i);
+          if (!grammar.getNonterminals().contains(symbol)) continue;
+          
+          // A->aBb
+          // rule 1. FOLLOW(B) <- FOLLOW(B) + FIRST(b)\{eps}
+          Set<String> first = firstOfSequence(p.getRightHandSide().subList(i + 1, p.getRightHandSide().size()), grammar, firstSets);
+          changed |= addWithoutEpsilon(followSets.get(symbol), first);
+
+          // rule 2. if eps in FIRST(b), then FOLLOW(B) <- FOLLOW(B) + FOLLOW(A)
+          if (first.contains(Grammar.EPSILON)) {
+            changed |= followSets.get(symbol).addAll(followSets.get(p.getLeftHandSide()));
+          }
+        }
+      }
+    } while (changed);
+
+    // 3. Construct Parsing Table
+    Map<String, Map<String, List<Production>>> cells = new LinkedHashMap<>();
+    for (String nt : grammar.getNonterminals()) {cells.put(nt, new LinkedHashMap<>());}
+
+    for (Production p : grammar.getProductions()) {
+      // A->alp
+      Set<String> first = firstOfSequence(p.getRightHandSide(), grammar, firstSets);
+
+      for (String terminal : first) {
+        if (!Grammar.EPSILON.equals(terminal)) {
+          // rule 1. if a in FIRST(alp)\{eps}, then add cells[A,a]
+          add(cells, p.getLeftHandSide(), terminal, p);
+        } else {
+          // rule 2. if eps in FIRST(alp), then add cells[A,b] for every b in FOLLOW(A)
+          for (String follow : followSets.get(p.getLeftHandSide())) {
+            add(cells, p.getLeftHandSide(), follow, p);
+          }
+        }
+      }
+    }
+
+    return new Ll1ParsingTable(grammar, firstSets, followSets, cells); // returns the result parsing table
   }
 
   public Grammar getGrammar() {
