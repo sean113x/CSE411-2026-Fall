@@ -230,13 +230,19 @@ public final class LrParsingTable {
 
   private static Automaton buildLR0Automaton(final Grammar grammar, final Production augmented) {
     // TODO: implement the body
-    return null; // TODO: Replace null with an Automaton instance. You can use the buildAutomaton method to create one.
+    final Set<Item> initial = closureLR0(Collections.singleton(new Item(augmented, 0, null)), grammar);
+    
+    // TODO: Replace null with an Automaton instance. You can use the buildAutomaton method to create one.
+    return buildAutomaton(initial, grammar, (state, symbol) -> gotoLR0(state, symbol, grammar));
   }
 
   private static Automaton buildCanonicalLR1Automaton(final Grammar grammar,
       final GrammarAnalysis analysis, final Production augmented) {
     // TODO: implement the body
-    return null; // TODO: Replace null with an Automaton instance. You can use the buildAutomaton method to create one.
+    Set<Item> initial = closureLr1(Collections.singleton(new Item(augmented, 0, Grammar.END_MARKER)), grammar, analysis);
+
+    // TODO: Replace null with an Automaton instance. You can use the buildAutomaton method to create one.
+    return buildAutomaton(initial, grammar, (state, symbol) -> gotoLr1(state, symbol, grammar, analysis));
   }
 
   private static Automaton buildAutomaton(final Set<Item> initial, final Grammar grammar,
@@ -348,7 +354,38 @@ public final class LrParsingTable {
 
   private static Automaton mergeLALRStates(final Automaton canonical) {
     // TODO: implement the body
-    return null; // TODO: Replace null with an Automaton instance.
+    Map<Set<Core>, Integer> cores = new LinkedHashMap<>();
+    List<Set<Item>> states = new ArrayList<>();
+    List<Map<String, Integer>> transitions = new ArrayList<>();
+    int[] mapping = new int[canonical.states.size()];
+
+    // 1. Group states by their LR(0) cores.
+    for (int i = 0; i < canonical.states.size(); i++) {
+      Set<Core> core = coreOf(canonical.states.get(i));
+      Integer id = cores.get(core);
+
+      // Create a new state with a new core
+      if (id == null) {
+        id = states.size();
+        cores.put(core, id);
+        states.add(new LinkedHashSet<>());
+        transitions.add(new LinkedHashMap<>());
+      }
+      mapping[i] = id;
+    }
+
+    // 2. Merge states and update transitions.
+    for (int i = 0; i < canonical.states.size(); i++) {
+      int from = mapping[i];
+      states.get(from).addAll(canonical.states.get(i));
+
+      for (Map.Entry<String, Integer> edge : canonical.transitions.get(i).entrySet()) {
+        transitions.get(from).put(edge.getKey(), mapping[edge.getValue()]);
+      }
+    }
+
+    // TODO: Replace null with an Automaton instance.
+    return new Automaton(states, transitions);
   }
 
   private static Set<Core> coreOf(final Set<Item> state) {
