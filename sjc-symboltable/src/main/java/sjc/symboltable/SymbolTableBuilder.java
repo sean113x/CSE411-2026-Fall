@@ -117,30 +117,79 @@ public class SymbolTableBuilder {
     @Override
     public boolean visit(final FieldDeclaration node) {
       // TODO
+      // node.fragment() returns the list of VariableDeclarationFragment
+      VariableDeclarationFragment variable = (VariableDeclarationFragment) node.fragments().get(0);
+      // variable.getName() returns the SimpleName
+      String name = variable.getName().getIdentifier();
+
+      // new field declaration
+      this.fieldMap.put(new Pair<>(this.className, name), node);
+
       return false;
     }
 
     @Override
     public boolean visit(final MethodDeclaration node) {
       // TODO
+      // backup nameMap to get parameters (scope!)
+      Map<String, ASTNode> fields = new HashMap<>(this.nameMap);
+
+      // gather new parameters
+      for (Object o : node.parameters()) {
+        SingleVariableDeclaration parameter = (SingleVariableDeclaration) o;
+        String name = parameter.getName().getIdentifier();
+
+        this.nameMap.put(name, parameter);
+      }
+
+      // let's visit the body of the method
+      node.getBody().accept(this);
+
+      // restore the origin parameters
+      this.nameMap = fields;
+
       return false;
     }
 
     @Override
     public boolean visit(final MethodInvocation node) {
       // TODO
+      // getExpression() returns the expression before the method name.
+      Expression receiver = node.getExpression();
+
+      // we want to get only within the current class
+      if (receiver == null || receiver.toString().equals(this.className)) {
+        String name = node.getName().getIdentifier();
+        MethodDeclaration method = this.methodMap.get(name);
+
+        this.result.put(node, method);
+      }
+
+      // visit each arguments
+      for (Object argument : node.arguments()) {
+        ((Expression) argument).accept(this);
+      }
       return false;
     }
 
     @Override
     public boolean visit(final SimpleName node) {
       // TODO
+      ASTNode declaration = this.nameMap.get(node.getIdentifier());
+
+      // map each node into their declaration
+      this.result.put(node, declaration);
       return false;
     }
 
     @Override
     public boolean visit(final VariableDeclarationStatement node) {
       // TODO
+      VariableDeclarationFragment variable = (VariableDeclarationFragment) node.fragments().get(0);
+      String name = variable.getName().getIdentifier();
+
+      // new variable declaration
+      this.nameMap.put(name, node);
       return false;
     }
 
@@ -178,6 +227,27 @@ public class SymbolTableBuilder {
     @Override
     public boolean visit(final TypeDeclaration node) {
       // TODO
+      this.className = node.getName().getIdentifier();
+      this.nameMap.clear();
+      this.methodMap.clear();
+
+      // check whether the class is public
+      if (!hasPublicModifier(node.modifiers())) {
+        this.classMap.put(this.className, node);
+      }
+
+      for (FieldDeclaration field : node.getFields()) {
+        field.accept(this);
+      }
+
+      // add their name first
+      for (MethodDeclaration method : node.getMethods()) {
+        this.methodMap.put(method.getName().getIdentifier(), method);
+      }
+
+      for (MethodDeclaration method : node.getMethods()) {
+        method.accept(this);
+      }
       return false;
     }
   }
